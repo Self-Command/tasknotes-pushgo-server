@@ -1,0 +1,6 @@
+services:
+  server:
+    environment:
+      ALLOW_HTTP: "true"
+      PUBLIC_URL: http://localhost:8787
+    ports: !override ["127.0.0.1:8787:8787"]

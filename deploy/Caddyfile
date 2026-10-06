@@ -1,0 +1,4 @@
+{$TASKNOTES_DOMAIN} {
+    encode zstd gzip
+    reverse_proxy server:8787
+}

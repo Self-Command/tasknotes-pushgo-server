@@ -1,0 +1,11 @@
+node_modules
+data
+secrets
+.env
+.env.*
+.git
+dist
+web-dist
+test-results
+playwright-report
+.shadcn-dependencies.json
