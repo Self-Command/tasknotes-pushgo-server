@@ -18,6 +18,14 @@ PUBLIC_URL 不能含路径；TLS 在反向代理终止。公网业务地址必�
 
 桌面本地验证：`docker compose -f compose.yaml -f compose.local.yaml up -d`，然后访问 http://localhost:8787。该配置仅绑定回环地址，不用于手机拍照验收。手机需可访问且被信任的 HTTPS 域名/证书；不要将自签未信任证书当作通过项。
 
+## GitHub 与镜像
+
+独立仓库自带 .github/workflows/container.yml：PR 运行类型检查、服务测试、网页测试并检查镜像构建；main 推送或 v* 标签在检查通过后发布 GHCR 镜像。镜像名称从仓库 owner/name 自动转换为小写，不要求固定用户名、仓库名或服务器地址。main 标签为 latest，版本标签沿用 v*，同时保留 sha-<提交前12位> 标签。构建目标为 linux/amd64 和 linux/arm64。
+
+首次发布后在 GitHub Packages 中将镜像设为公开，公开部署才可匿名拉取。私有包需要服务器 docker login ghcr.io。GitHub 的 GITHUB_TOKEN 只用于推镜像；服务账号、频道密码及 Gateway token 仍在部署端配置。没有运行或验证远程 Actions 前，不应将其记为已成功发布。
+
+部署已发布镜像时，在 .env 设置 TASKNOTES_IMAGE=ghcr.io/<owner>/<repository>:<tag>，然后 `docker compose pull server && docker compose up -d server`。初始化密钥的 Docker 命令也使用这个镜像名。已有本地镜像包则保留默认 tasknotes-pushgo:0.1.0。公网域名、Gateway 允许列表、频道和优先级均由部署者配置。
+
 ## 使用与规则
 
 - 在 TaskNotes 原界面创建的新任务自动接入；scheduled=开始，due=结束。日期没有时分的任务保存在“待配置”，不发送打卡提醒。
