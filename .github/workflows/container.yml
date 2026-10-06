@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: service-${{ github.ref }}
+  group: ${{ github.event_name == 'pull_request' && format('service-pr-{0}', github.event.pull_request.number) || 'service-publish' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -36,7 +36,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
-      contents: read
+      contents: write
       packages: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -69,3 +69,34 @@ jobs:
           cache-to: type=gha,mode=max
           provenance: mode=max
           sbom: true
+      - name: Publish deployment download
+        if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          image="ghcr.io/${GITHUB_REPOSITORY,,}"
+          tag="service-build-$GITHUB_RUN_NUMBER"
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then tag="$GITHUB_REF_NAME"; fi
+          mkdir -p dist-release/tasknotes-pushgo-server
+          cp compose.yaml .env.example README.md LICENSE THIRD-PARTY-NOTICES.md dist-release/tasknotes-pushgo-server/
+          cp -r deploy scripts THIRD-PARTY-LICENSES dist-release/tasknotes-pushgo-server/
+          sed -i "s|^TASKNOTES_IMAGE=.*|TASKNOTES_IMAGE=$image:sha-${GITHUB_SHA:0:12}|" dist-release/tasknotes-pushgo-server/.env.example
+          printf 'commit=%s\nimage=%s:sha-%s\nplatforms=linux/amd64,linux/arm64\n' \
+            "$GITHUB_SHA" "$image" "${GITHUB_SHA:0:12}" > dist-release/BUILD_INFO.txt
+          tar -czf dist-release/tasknotes-pushgo-server-deploy.tar.gz -C dist-release tasknotes-pushgo-server
+          rm -r dist-release/tasknotes-pushgo-server
+          (cd dist-release && sha256sum ./* > SHA256SUMS.txt)
+          printf '%s\n' \
+            '独立 TaskNotes 拍照打卡后端自动构建。部署包不含账号密码、频道密码和网关凭据。' \
+            "Docker: $image:latest (linux/amd64, linux/arm64)" \
+            '下载部署包，按 README 配置域名、允许的网关和独立密钥后启动。' \
+            "Source: $GITHUB_SHA" > release-notes.md
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" \
+            --json targetCommitish --jq .targetCommitish > existing-release.txt; then
+            test "$(cat existing-release.txt)" = "$GITHUB_SHA"
+          else
+            gh release create "$tag" dist-release/* --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" --title "TaskNotes PushGo service build $GITHUB_RUN_NUMBER" \
+              --notes-file release-notes.md --latest
+          fi
